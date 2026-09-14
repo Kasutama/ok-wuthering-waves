@@ -120,7 +120,9 @@ jobs:
   package:
     name: 3 · Build and optionally sign
     needs: validate
-    runs-on: windows-latest
+    # 固定 windows-2022：windows-2025 镜像上 32 位 makensis 打 NSIS 安装包时报
+    # "Internal compiler error #12345: error mmapping file ... out of range"（32 位地址空间问题）
+    runs-on: windows-2022
     timeout-minutes: 120
     env:
       SIGN_BUILD: 'false'
