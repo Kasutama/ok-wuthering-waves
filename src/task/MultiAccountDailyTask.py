@@ -6,15 +6,36 @@ from src.task.DailyTask import DailyTask
 from src.task.WWOneTimeTask import WWOneTimeTask
 from src.task.BaseCombatTask import BaseCombatTask
 from src.task.BaseWWTask import LOGIN_TEXTS
+from src.task.AutoLoginTask import AutoLoginTask
 from src.task.MouseResetTask import MouseResetTask
 
 account_pattern = re.compile(r'\*\*\*\*')
+
+# 进入游戏/开始游戏 按钮文案（切换账号后登录页按钮可能变为此类文案）
+ENTER_GAME_TEXTS = ["开始游戏", "開始遊戲", re.compile('进入游戏|進入遊戲|Start Game|Enter Game', re.IGNORECASE)]
+
+# OCR 容易混淆的字符映射，用于账号后缀的模糊比对
+_CONFUSABLE_CHARS = str.maketrans({
+    '0': 'o', 'o': 'o',
+    '1': 'l', 'l': 'l', 'i': 'l',
+    '5': 's', 's': 's',
+    '2': 'z', 'z': 'z',
+    '8': 'b', 'b': 'b',
+})
 
 
 def normalize_account_name(account):
     if not account:
         return account
     return account.lower().replace('0', 'o').replace('.con', '.com')
+
+
+def fuzzy_account_key(account):
+    """生成容错比对键：忽略大小写、混淆字符差异，用于 OCR 误读场景。"""
+    if not account:
+        return account
+    text = account.lower().replace('.con', '.com')
+    return text.translate(_CONFUSABLE_CHARS)
 
 
 class MultiAccountDailyTask(WWOneTimeTask, BaseCombatTask):
@@ -29,15 +50,19 @@ class MultiAccountDailyTask(WWOneTimeTask, BaseCombatTask):
         self.support_schedule_task = True
 
     def _mark_done(self, account):
-        normalized = normalize_account_name(account)
+        normalized = fuzzy_account_key(account)
         if normalized:
             self.done_set.add(normalized)
 
     def _is_done(self, account):
-        return normalize_account_name(account) in self.done_set
+        return fuzzy_account_key(account) in self.done_set
 
     def _same_account(self, left, right):
-        return normalize_account_name(left) == normalize_account_name(right)
+        if not left or not right:
+            return False
+        # 先精确归一化比对，再做容错比对（应对 OCR 误读 0/o、1/l 等）
+        return normalize_account_name(left) == normalize_account_name(right) or \
+            fuzzy_account_key(left) == fuzzy_account_key(right)
 
     def run(self):
         WWOneTimeTask.run(self)
@@ -100,6 +125,12 @@ class MultiAccountDailyTask(WWOneTimeTask, BaseCombatTask):
         mouse_reset_was_enabled = mouse_reset_task.enabled if mouse_reset_task else False
         if mouse_reset_was_enabled:
             mouse_reset_task.disable()
+        # 切号期间禁用 AutoLoginTask，避免其并发点击（切换账号确认键/开始游戏）
+        # 打断本任务的点击时序
+        auto_login_task = self.executor.get_task_by_class(AutoLoginTask)
+        auto_login_was_enabled = auto_login_task.enabled if auto_login_task else False
+        if auto_login_was_enabled:
+            auto_login_task.disable()
         try:
             max_retries = 5
             for attempt in range(1, max_retries + 1):
@@ -122,7 +153,8 @@ class MultiAccountDailyTask(WWOneTimeTask, BaseCombatTask):
                     lambda: self._click_account_in_list(),
                     time_out=10, raise_if_not_found=True
                 )
-                self.sleep(1)
+                # 等待下拉列表收起后再校验当前账号，避免把列表项误判为当前账号
+                self._wait_dropdown_closed()
                 current_account = self._detect_current_account_from_login()
                 self.log_info(self.tr('Selected account: {selected}, displayed account: {displayed}').format(
                     selected=account, displayed=current_account))
@@ -141,6 +173,10 @@ class MultiAccountDailyTask(WWOneTimeTask, BaseCombatTask):
             texts = self.ocr()
             login_btn = self.find_boxes(texts, boundary=self.box_of_screen(0.3, 0.3, 0.7, 0.8),
                                         match=LOGIN_TEXTS)
+            if not login_btn:
+                # 切换账号后按钮文案可能是 进入游戏/开始游戏，不匹配 LOGIN_TEXTS，
+                # 在全屏范围内查找后再点击
+                login_btn = self.find_boxes(texts, match=ENTER_GAME_TEXTS)
             if login_btn:
                 self.click(login_btn, after_sleep=3)
             else:
@@ -158,6 +194,15 @@ class MultiAccountDailyTask(WWOneTimeTask, BaseCombatTask):
         finally:
             if mouse_reset_was_enabled:
                 mouse_reset_task.enable()
+            if auto_login_was_enabled:
+                auto_login_task.enable()
+
+    def _wait_dropdown_closed(self, time_out=10):
+        """等待账号下拉列表收起：收起后屏幕上只剩 1 个掩码账号文本。"""
+        return self.wait_until(
+            lambda: len(self.ocr(match=account_pattern)) <= 1,
+            time_out=time_out, raise_if_not_found=False
+        )
 
     def find_account_drop_down(self):
         return self.wait_until(self.do_find_account_drop_down, time_out=60, settle_time=2, raise_if_not_found=True)
