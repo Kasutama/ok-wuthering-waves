@@ -50,12 +50,17 @@ class MultiAccountDailyTask(WWOneTimeTask, BaseCombatTask):
         self.support_schedule_task = True
 
     def _mark_done(self, account):
-        normalized = fuzzy_account_key(account)
+        normalized = normalize_account_name(account)
         if normalized:
             self.done_set.add(normalized)
 
     def _is_done(self, account):
-        return fuzzy_account_key(account) in self.done_set
+        # done_set 存标准归一化键；先精确查，查不到再做容错比对（应对 OCR 误读）
+        normalized = normalize_account_name(account)
+        if normalized in self.done_set:
+            return True
+        fuzzy_key = fuzzy_account_key(account)
+        return any(fuzzy_account_key(done) == fuzzy_key for done in self.done_set)
 
     def _same_account(self, left, right):
         if not left or not right:
