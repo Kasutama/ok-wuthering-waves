@@ -25,7 +25,10 @@ env:
 jobs:
   validate:
     name: 1 · Validate
-    runs-on: windows-latest
+    # 固定 windows-2022：2025 镜像 20260828.587 起 openvino 2026.3.0 在首次 OCR
+    # 推理时原生崩溃（无 Python traceback，TestCD 等全部 OCR 测试受影响）。
+    # 上游 20260819.586 镜像同样配置可通过；属 GitHub runner 镜像回归。
+    runs-on: windows-2022
 
     steps:
       - name: Configure runner
