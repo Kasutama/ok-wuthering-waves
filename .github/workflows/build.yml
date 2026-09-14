@@ -121,6 +121,7 @@ jobs:
     name: 3 · Build and optionally sign
     needs: validate
     runs-on: windows-latest
+    timeout-minutes: 120
     env:
       SIGN_BUILD: 'false'
 
@@ -131,8 +132,17 @@ jobs:
           [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
           git config --global core.autocrlf false
           git config --global core.eol lf
+          # ok_templates 子模块含超长截图文件名，必须启用 git long paths
+          git config --global core.longpaths true
           git config --global user.email "ok-oldking@users.noreply.github.com"
           git config --global user.name "ok-oldking"
+
+      - name: Enable Windows long paths
+        shell: pwsh
+        run: |
+          # 安装器内嵌 exe 也会做 git submodule 更新，系统级也开启长路径
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -Value 1 -Type DWord
+          (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem').LongPathsEnabled
 
       - name: Check out source
         uses: actions/checkout@v4
