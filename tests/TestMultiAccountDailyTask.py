@@ -63,7 +63,8 @@ class TestMultiAccountDailyTask(unittest.TestCase):
             def info_set(self, *args):
                 pass
 
-            def click(self, account, after_sleep=0):
+            # multifix10: account list clicks go through the PostMessage channel
+            def post_click_box(self, account, after_sleep=0):
                 self.clicked.append(account.name)
 
             def log_info(self, *args):

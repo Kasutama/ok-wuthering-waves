@@ -51,6 +51,17 @@ class FakeLoginTask:
     def click(self, target, after_sleep=0):
         self.clicked.append([b.name for b in target])
 
+    # multifix10: wait_login routes login UI clicks through the PostMessage channel
+    def post_click_box(self, box, after_sleep=1, relative_x=0.5, relative_y=0.5):
+        if isinstance(box, list):
+            if not box:
+                return False
+            box = box[0]
+        self.clicked.append([box.name])
+
+    def post_click_relative(self, *args, **kwargs):
+        pass
+
     def sleep(self, timeout):
         self.slept.append(timeout)
 
