@@ -361,24 +361,46 @@ jobs:
           path: pyappify_dist
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          body: |
-            ### 更新日志 ${{ github.ref_name }}:
-              ${{ github.ref_name }}
-            ### 下载包说明
-              * [ok-ww-win32-China-setup.exe](https://github.com/ok-oldking/ok-wuthering-waves/releases/download/${{ github.ref_name }}/ok-ww-win32-China-setup.exe) 完整安装包, 更新使用阿里云+腾讯CNB.
-              * [ok-ww-win32-Global-setup.exe](https://github.com/ok-oldking/ok-wuthering-waves/releases/download/${{ github.ref_name }}/ok-ww-win32-Global-setup.exe) full package with dependencies, using GitHub and PyPi as update source
-              * 不要下载ok-ww-win32.zip,和SourceCode.zip, Do Not Download the SourceCode, ok-ww-win32.zip
-            ### 如果无法下载或下载慢, 可以使用其他下载源
-              * [Mirror酱下载渠道](https://mirrorchyan.com/zh/projects?rid=okww&source=ok-ww-release), 国内网页直链, 下载需要购买CD-KEY, 已有Mirror酱CD-KEY可免费下载
-              * [百度网盘](https://pan.baidu.com/s/102Mh1djq2B1T-cIJhct9Gg?pwd=okww) 免费下载
-              * [夸克网盘](https://pan.quark.cn/s/24433f3febc1) 免费下载
-          draft: false
-          prerelease: false
-          files: pyappify_dist/*
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -uo pipefail
+          NOTES_FILE="$(mktemp)"
+          cat > "$NOTES_FILE" <<EOF
+          ### 更新日志 $TAG:
+            $TAG
+          ### 下载包说明
+            * [ok-ww-win32-China-setup.exe](https://github.com/ok-oldking/ok-wuthering-waves/releases/download/$TAG/ok-ww-win32-China-setup.exe) 完整安装包, 更新使用阿里云+腾讯CNB.
+            * [ok-ww-win32-Global-setup.exe](https://github.com/ok-oldking/ok-wuthering-waves/releases/download/$TAG/ok-ww-win32-Global-setup.exe) full package with dependencies, using GitHub and PyPi as update source
+            * 不要下载ok-ww-win32.zip,和SourceCode.zip, Do Not Download the SourceCode, ok-ww-win32.zip
+          ### 如果无法下载或下载慢, 可以使用其他下载源
+            * [Mirror酱下载渠道](https://mirrorchyan.com/zh/projects?rid=okww&source=ok-ww-release), 国内网页直链, 下载需要购买CD-KEY, 已有Mirror酱CD-KEY可免费下载
+            * [百度网盘](https://pan.baidu.com/s/102Mh1djq2B1T-cIJhct9Gg?pwd=okww) 免费下载
+            * [夸克网盘](https://pan.quark.cn/s/24433f3febc1) 免费下载
+          EOF
+          # 创建 Release（若已存在残留对象则忽略，后续 upload 会补齐资产）
+          gh release create "$TAG" --title "$TAG" --notes-file "$NOTES_FILE" \
+            --latest || echo "release create returned non-zero, assume it already exists"
+          # 逐资产上传，每个最多重试 5 次，规避 GitHub 瞬时 500 / Error saving asset
+          shopt -s nullglob
+          for f in pyappify_dist/*; do
+            ok=0
+            for attempt in 1 2 3 4 5; do
+              if gh release upload "$TAG" "$f" --clobber; then
+                echo "uploaded: $f"
+                ok=1
+                break
+              fi
+              echo "::warning::upload $f failed on attempt $attempt, retrying after backoff"
+              sleep $((attempt * 20))
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "::error::failed to upload asset after 5 attempts: $f"
+              exit 1
+            fi
+          done
 
       - name: Trigger distribution workflows
         if: false
