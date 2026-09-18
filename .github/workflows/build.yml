@@ -380,9 +380,16 @@ jobs:
             * [百度网盘](https://pan.baidu.com/s/102Mh1djq2B1T-cIJhct9Gg?pwd=okww) 免费下载
             * [夸克网盘](https://pan.quark.cn/s/24433f3febc1) 免费下载
           EOF
-          # 创建 Release（若已存在残留对象则忽略，后续 upload 会补齐资产）
+          # 先清理同 tag 的残留 draft release（半成品 draft 会让后续大资产上传持续失败）
+          DRAFT_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+            --jq 'select(.draft==true) | .id' 2>/dev/null || true)
+          if [ -n "$DRAFT_ID" ]; then
+            echo "deleting leftover draft release $DRAFT_ID for $TAG"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$DRAFT_ID" || true
+          fi
+          # 创建 Release（若已存在“已发布”对象则忽略，后续 upload --clobber 会补齐资产）
           gh release create "$TAG" --title "$TAG" --notes-file "$NOTES_FILE" \
-            --latest || echo "release create returned non-zero, assume it already exists"
+            --latest || echo "release create returned non-zero, assume a published release already exists"
           # 逐资产上传，每个最多重试 5 次，规避 GitHub 瞬时 500 / Error saving asset
           shopt -s nullglob
           for f in pyappify_dist/*; do
