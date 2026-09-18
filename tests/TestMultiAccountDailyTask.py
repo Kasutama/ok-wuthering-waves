@@ -3,6 +3,7 @@ import unittest
 from src.task.BaseWWTask import LOGIN_TEXTS
 from src.task.MultiAccountDailyTask import (
     MultiAccountDailyTask,
+    ENTER_GAME_TEXTS,
     account_pattern,
     normalize_account_name,
 )
@@ -63,8 +64,9 @@ class TestMultiAccountDailyTask(unittest.TestCase):
             def info_set(self, *args):
                 pass
 
-            # multifix10: account list clicks go through the PostMessage channel
-            def post_click_box(self, account, after_sleep=0):
+            # multifix13: account list clicks go through the physical channel
+            # (CEF launcher popup ignores PostMessage synthetic clicks)
+            def physical_click_box(self, account, after_sleep=0):
                 self.clicked.append(account.name)
 
             def log_info(self, *args):
@@ -79,6 +81,117 @@ class TestMultiAccountDailyTask(unittest.TestCase):
 
         self.assertEqual(selected, "cc****03@example.com.hk")
         self.assertEqual(task.clicked, ["cc****03@example.com.hk"])
+
+
+class FakeLoginClickTask:
+    """Drives _click_login_until_entered with scripted OCR frames."""
+
+    def __init__(self, frames, in_world_frames=None):
+        self.frames = list(frames)
+        self.in_world_frames = list(in_world_frames or [])
+        self.logged_in = False
+        self.box_clicks = []
+        self.relative_clicks = []
+        self.front_ensured = 0
+
+    def in_team_and_world(self):
+        return self.in_world_frames.pop(0) if self.in_world_frames else False
+
+    def ensure_in_front(self):
+        self.front_ensured += 1
+
+    def box_of_screen(self, *args, **kwargs):
+        return args
+
+    def ocr(self):
+        return self.frames.pop(0) if self.frames else []
+
+    def find_boxes(self, texts, boundary=None, match=None):
+        if match is None:
+            match = boundary
+        if match == LOGIN_TEXTS:
+            hits = [b for b in texts if getattr(b, 'kind', '') == 'login']
+            return hits or None
+        if match == ENTER_GAME_TEXTS:
+            hits = [b for b in texts if getattr(b, 'kind', '') == 'enter']
+            return hits or None
+        if match == account_pattern:
+            return [b for b in texts if getattr(b, 'kind', '') == 'account']
+        return None
+
+    def physical_click_box(self, box, after_sleep=0):
+        if isinstance(box, list):
+            box = box[0]
+        self.box_clicks.append(box.name)
+
+    def physical_click_relative(self, rel_x, rel_y, hcenter=False, vcenter=False, after_sleep=0):
+        self.relative_clicks.append((rel_x, rel_y))
+
+    def sleep(self, *args):
+        pass
+
+    def log_info(self, *args, **kwargs):
+        pass
+
+
+class OCRBox:
+    def __init__(self, name, kind, x=0, y=0, width=10, height=10):
+        self.name = name
+        self.kind = kind
+        self.x, self.y, self.width, self.height = x, y, width, height
+
+
+class TestClickLoginUntilEntered(unittest.TestCase):
+
+    def test_ocr_login_button_goes_through_physical_channel(self):
+        task = FakeLoginClickTask(
+            frames=[[OCRBox('登录', 'login')], []],
+            # not in world for round 1, already in world at round 2
+            in_world_frames=[False, True],
+        )
+
+        ok = MultiAccountDailyTask._click_login_until_entered(task, max_rounds=2)
+
+        self.assertTrue(ok)
+        self.assertTrue(task.logged_in)
+        self.assertEqual(task.box_clicks, ['登录'])
+        self.assertEqual(task.relative_clicks, [])
+        # foreground ensured on the clicking round; round 2 returns before it
+        self.assertEqual(task.front_ensured, 1)
+
+    def test_enter_game_button_variant_is_clicked(self):
+        task = FakeLoginClickTask(
+            frames=[[OCRBox('开始游戏', 'enter')]],
+            in_world_frames=[False, False],
+        )
+
+        MultiAccountDailyTask._click_login_until_entered(task, max_rounds=1)
+
+        self.assertEqual(task.box_clicks, ['开始游戏'])
+
+    def test_missing_button_with_account_text_uses_center_fallback(self):
+        task = FakeLoginClickTask(
+            frames=[[OCRBox('aa****01@x.com', 'account')]],
+            in_world_frames=[False, False],
+        )
+
+        MultiAccountDailyTask._click_login_until_entered(task, max_rounds=1)
+
+        self.assertEqual(task.box_clicks, [])
+        self.assertEqual(task.relative_clicks, [(0.5, 0.568)])
+
+    def test_no_button_and_no_account_evidence_clicks_nothing(self):
+        task = FakeLoginClickTask(
+            frames=[[]],
+            in_world_frames=[False, False],
+        )
+
+        MultiAccountDailyTask._click_login_until_entered(task, max_rounds=1)
+
+        self.assertEqual(task.box_clicks, [])
+        self.assertEqual(task.relative_clicks, [])
+        # still brought to front even when nothing is clicked
+        self.assertEqual(task.front_ensured, 1)
 
 
 if __name__ == "__main__":
