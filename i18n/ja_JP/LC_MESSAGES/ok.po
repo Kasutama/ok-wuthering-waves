@@ -1395,3 +1395,8 @@ msgstr "特異悪夢"
 
 msgid "Which Special Nightmare to Teleport"
 msgstr "テレポートする特異悪夢"
+msgid "Multi Account Config Task"
+msgstr "複数アカウント設定タスク"
+
+msgid "Log in to accounts in card order and run tasks with independent configurations"
+msgstr "カードの順番でアカウントにログインし、個別の設定でタスクを実行します"
