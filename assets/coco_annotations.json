@@ -1259,6 +1259,15 @@
             "file_name": "images/7.png",
             "width": 3840,
             "height": 2160
+        },
+        {
+            "id": 41,
+            "file_name": "images/QQ20260830-103805.png",
+            "width": 2560,
+            "height": 1440,
+            "license": 0,
+            "date_captured": null,
+            "url": null
         }
     ],
     "annotations": [
@@ -5335,6 +5344,19 @@
             "iscrowd": 0,
             "ignore": 0,
             "segmentation": []
+        },
+        {
+            "id": 440,
+            "image_id": 41,
+            "category_id": 287,
+            "bbox": [
+                2355,
+                304,
+                62,
+                52
+            ],
+            "area": 3224,
+            "iscrowd": 0
         }
     ],
     "categories": [
@@ -6766,6 +6788,11 @@
         {
             "id": 286,
             "name": "hsin_lib2",
+            "supercategory": ""
+        },
+        {
+            "id": 287,
+            "name": "char_lingyang",
             "supercategory": ""
         }
     ]
