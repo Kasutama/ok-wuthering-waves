@@ -69,6 +69,9 @@ jobs:
         run: python -m ok.update.inline_ok_requirements --tag "$env:RELEASE_TAG"
 
       - name: Run tests
+        # 上游 b2c3af8：OCR warmup 会在测试进程退出时挂住，run_test.py 里
+        # patch 掉 TaskExecutor.init_default_ocr 并启用 faulthandler 兜底
+        timeout-minutes: 20
         env:
           GITHUB_TOKEN: ''
           GH_TOKEN: ''
@@ -99,7 +102,7 @@ jobs:
           $failed = @()
           Get-ChildItem -Path ".\tests\*.py" | ForEach-Object {
             Write-Host "Running tests in $($_.FullName)"
-            $proc = Start-Process -FilePath python -ArgumentList @('-m','unittest',$_.FullName) `
+            $proc = Start-Process -FilePath python -ArgumentList @('-u','run_test.py',$_.FullName) `
               -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\test_out.txt" -RedirectStandardError "$env:TEMP\test_err.txt"
             if (-not $proc.WaitForExit(600000)) {
               Write-Host "::error::TIMEOUT after 10min, killing: $($_.Name)"
