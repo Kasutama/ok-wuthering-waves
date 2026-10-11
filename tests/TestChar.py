@@ -1564,6 +1564,7 @@ class TestChar(TaskTestCase):
 
         task = Task()
         combat = AutoCombatTask.__new__(AutoCombatTask)
+        combat.find_feature = lambda *args, **kwargs: None
         current = BaseChar(task, 0, char_type=CharType.MAIN_DPS)
         blocked = IntroBlockedChar(task, 1, char_type=CharType.HEALER)
         forced = IntroForcedChar(task, 2, char_type=CharType.MAIN_DPS)
@@ -1612,6 +1613,7 @@ class TestChar(TaskTestCase):
 
         task = Task()
         combat = AutoCombatTask.__new__(AutoCombatTask)
+        combat.find_feature = lambda *args, **kwargs: None
         current = BaseChar(task, 0, char_type=CharType.MAIN_DPS)
         blocked = IntroBlockedChar(task, 1, char_type=CharType.HEALER)
         combat.chars = [current, blocked]
@@ -1643,6 +1645,7 @@ class TestChar(TaskTestCase):
 
         task = Task()
         combat = AutoCombatTask.__new__(AutoCombatTask)
+        combat.find_feature = lambda *args, **kwargs: None
         current = BaseChar(task, 0, char_type=CharType.MAIN_DPS)
         target = BaseChar(task, 1, char_type=CharType.HEALER)
         combat.chars = [current, target]
