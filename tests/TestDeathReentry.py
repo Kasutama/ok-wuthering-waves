@@ -42,7 +42,7 @@ class TestTacetDeathReentry(unittest.TestCase):
         noop = lambda *args, **kwargs: None
         for name in ('info_incr', 'sleep', 'openF2Book', 'click_relative', 'open_boss_book',
                      'click_team_challenge', 'wait_in_team_and_world', 'walk_to_treasure', 'pick_f',
-                     'wait_click_skip_dialog_confirm'):
+                     'wait_click_skip_dialog_confirm', 'esc_cancel'):
             setattr(task, name, noop)
         task.get_stamina = lambda: (120, 0, 120)
         task.teleport_to_tacet = lambda index: task.teleports.append(index)
@@ -77,6 +77,56 @@ class TestTacetDeathReentry(unittest.TestCase):
         task.farm_tacet(config={'Which Tacet Suppression to Farm': 1})
 
         self.assertEqual([False, True, True], flags)
+
+    def test_reenter_from_f2_book_after_walk_failure(self):
+        task = self.make_task(deaths=0)
+        walk_calls = []
+
+        def walk():
+            walk_calls.append(True)
+            if len(walk_calls) == 1:
+                raise Exception('can not walk to treasure!')
+
+        task.walk_to_treasure = walk
+        esc = []
+        task.esc_cancel = lambda: esc.append(True)
+
+        task.farm_tacet(config={'Which Tacet Suppression to Farm': 1})
+
+        self.assertEqual(2, len(task.combat_calls))
+        self.assertEqual(1, len(esc))
+        self.assertIn('farm_tacet: walk_to_treasure failed (can not walk to treasure!), re-enter from F2 book',
+                      task.logs)
+
+    def test_stop_after_max_walk_retries(self):
+        task = self.make_task(deaths=0)
+
+        def walk():
+            raise Exception('can not walk to treasure!')
+
+        task.walk_to_treasure = walk
+
+        self.assertIsNone(task.farm_tacet(config={'Which Tacet Suppression to Farm': 1}))
+
+        self.assertEqual(2, len(task.combat_calls))
+        self.assertIn('farm_tacet: exceeded walk_to_treasure retries (2), stop farming', task.logs)
+
+    def test_walk_failure_clears_heal_point(self):
+        task = self.make_task(deaths=1)  # 第一轮死亡恢复(置 True), 第二轮走宝箱失败(应清回 False)
+        walk_calls = []
+
+        def walk():
+            walk_calls.append(True)
+            if len(walk_calls) == 1:
+                raise Exception('can not walk to treasure!')
+
+        task.walk_to_treasure = walk
+        task.esc_cancel = lambda: None
+        flags = record_heal_point(task, 'combat_once')
+
+        task.farm_tacet(config={'Which Tacet Suppression to Farm': 1})
+
+        self.assertEqual([False, True, False], flags)
 
 
 class TestFarmEchoDeathReentry(unittest.TestCase):
